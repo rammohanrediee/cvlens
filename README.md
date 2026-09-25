@@ -20,12 +20,6 @@ Scores and suggestions are decision support. They do not reproduce a specific em
 
 ![CVLens analysis overview](images/cvlens-analysis.png)
 
-### Mobile suggestion editor
-
-<p align="center">
-  <img src="images/cvlens-mobile-editor.png" alt="CVLens mobile suggestion editor" width="375">
-</p>
-
 ## What it does
 
 - Accepts PDF resumes up to 5 MiB and 20 pages.
