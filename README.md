@@ -226,12 +226,6 @@ Deploy `web/dist/` with a static host or reverse proxy. Route `/api` to the Fast
 - Keyword and embedding similarity do not prove proficiency or job readiness.
 - Suggested rewrites require human review; never add unsupported claims or metrics.
 
-## Project lineage
-
-CVLens is based on [Deepak Padhi's AI Resume Analyzer](https://github.com/deepakpadhi986/AI-Resume-Analyzer), used under the MIT License. The current repository adds the React product workspace, FastAPI boundary, bounded PDF/OCR extraction, evidence-backed job matching, report generation, automated checks, and deployment configuration.
-
-See [CONTRIBUTIONS.md](CONTRIBUTIONS.md), [NOTICE](NOTICE), and [LICENSE](LICENSE) for attribution and license details.
-
 ## License
 
 CVLens is available under the [MIT License](LICENSE). The upstream copyright and permission notice are retained.
