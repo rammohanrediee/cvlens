@@ -1,162 +1,99 @@
-# AI Resume Analyzer
+# CVLens
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-frontend-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![React 19](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](https://react.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Tests](https://github.com/rammohanrediee/cvlens/actions/workflows/tests.yml/badge.svg)](https://github.com/rammohanrediee/cvlens/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-216B4B.svg)](LICENSE)
 
-AI Resume Analyzer is a portfolio-grade Streamlit application and FastAPI service that compares a resume with a target job description. It combines deterministic parsing, ATS-style checks, optional semantic matching, evidence-backed requirement mapping, improvement guidance, and downloadable PDF reporting.
+CVLens is a responsive resume analysis workspace built with React and FastAPI. It extracts text from PDF resumes, checks document structure and bullet quality, compares resume evidence with a pasted job description, and generates a downloadable analysis report.
 
-The application is designed as a decision-support tool. Its scores and suggestions help candidates review a resume; they do not reproduce a specific employer's ATS or guarantee an interview.
+Scores and suggestions are decision support. They do not reproduce a specific employer's applicant tracking system or guarantee an interview.
 
-## Origin and my contribution
+## Product preview
 
-This repository is a substantial re-architecture of
-[Deepak Padhi's AI Resume Analyzer](https://github.com/deepakpadhi986/AI-Resume-Analyzer),
-used under the MIT License. The upstream project supplied the original Streamlit
-resume-analysis concept, course/video recommendation lists, parser foundation,
-and early candidate/admin workflow. I retained its copyright and license.
+### Resume upload
 
-My work focuses on turning that foundation into a testable, service-oriented
-application. I created or rebuilt:
+![CVLens resume upload workspace](images/cvlens-upload.png)
 
-- a separate frontend and backend package structure;
-- a hybrid PDF extraction pipeline that keeps reliable text-layer output and
-  applies OCR only to weak or image-only pages;
-- a versioned JSON HTTP API with health, analysis, gap, interview-prep, bullet,
-  and PDF-report endpoints;
-- resume-to-job evidence mapping that links prioritized requirements to
-  supporting resume lines;
-- deterministic skill normalization, ATS checks, bullet-quality review, and
-  lexical fallbacks;
-- optional semantic matching with `sentence-transformers/all-MiniLM-L6-v2`;
-- SQLite and PostgreSQL persistence behind one storage interface;
-- environment-based admin authentication and deployment configuration;
-- downloadable PDF analysis reports;
-- unit, API, architecture, and frontend-navigation tests;
-- Docker, Railway-style, and continuous-integration configuration.
+### Analysis workspace
 
-See [CONTRIBUTIONS.md](CONTRIBUTIONS.md) for the upstream-to-current comparison
-and file-level ownership map.
+![CVLens analysis overview](images/cvlens-analysis.png)
 
-## Current development
+### Mobile suggestion editor
 
-The application includes a React + Vite workspace for uploading resumes, reviewing ATS
-checks, editing locally drafted suggestions, and matching a pasted job description. The
-existing Streamlit interface remains available alongside the API.
+<p align="center">
+  <img src="images/cvlens-mobile-editor.png" alt="CVLens mobile suggestion editor" width="375">
+</p>
 
-## Screenshots
+## What it does
 
-![AI Resume Analyzer report overview](images/resume-report-overview.png)
+- Accepts PDF resumes up to 5 MiB and 20 pages.
+- Uses native PDF text when available and Tesseract OCR for weak or image-only pages.
+- Detects contact details, education, skills, experience, projects, achievements, and certifications.
+- Scores resume structure and groups ATS checks into passed and needs-attention sections.
+- Reviews weak bullet openings, missing metrics, and short evidence statements.
+- Compares a resume with a pasted job description using deterministic matching and optional embeddings.
+- Maps requirements to supporting resume lines and identifies missing skills, tools, domain terms, and evidence.
+- Supports editable local suggestion drafts, copying, skip and undo, and a full-screen mobile editor.
+- Generates a downloadable PDF analysis report.
 
-![Recommended courses and interview resources](images/recommendations-resources.png)
+## Technology
 
-## Highlights
-
-- Accepts bounded PDF uploads through FastAPI and extracts digital or scanned resumes,
-  with page-level quality checks and OCR fallback.
-- Parses name, contact details, education, skills, and actual PDF page count from the extracted text.
-- Scores expected resume sections and groups results into readable ATS categories.
-- Compares resumes with job descriptions using embeddings when available and deterministic lexical fallbacks otherwise.
-- Maps prioritized JD capabilities to exact supporting resume lines and reports evidence coverage.
-- Categorizes missing signals across skills, tools, domain knowledge, and evidence.
-- Reviews bullet quality and suggests stronger, outcome-oriented phrasing.
-- Generates technical, project, and behavioral interview-practice questions from the JD.
-- Exports a PDF analysis report.
-- Stores local analytics in SQLite or connects to PostgreSQL for shared deployments.
-- Keeps analytics disabled by default and never persists resume files or personal identifiers.
-- Exposes the analysis workflow through a versioned JSON API.
-
-## How it works
-
-```mermaid
-flowchart LR
-    A[Resume PDF] --> API[FastAPI upload boundary]
-    API --> B[Native page extraction]
-    B --> C{Text quality}
-    C -->|Usable| D[Normalized page text]
-    C -->|Weak or empty| E[Tesseract OCR]
-    E --> D
-    D --> F[Parsing and skill normalization]
-    G[Target job description] --> H[Semantic or lexical matching]
-    F --> H
-    F --> I[ATS and bullet checks]
-    H --> J[Evidence map and gap analysis]
-    I --> K[Streamlit report]
-    J --> K
-    K --> L[PDF export]
-```
-
-Semantic matching uses `sentence-transformers/all-MiniLM-L6-v2` when the optional dependency is installed. If the model cannot load, the application falls back to deterministic matching so the main workflow remains available.
+| Layer | Technology |
+|---|---|
+| Web client | React 19, Vite 7, JavaScript, CSS design tokens |
+| API | FastAPI, Uvicorn, Pydantic |
+| Resume analysis | Python, scikit-learn, deterministic parsers |
+| PDF extraction | PyMuPDF, pdfminer.six, Tesseract OCR |
+| PDF reports | ReportLab with a built-in fallback writer |
+| Automation | GitHub Actions, Ruff, Coverage, pip-audit, Docker |
 
 ## Architecture
 
 ```text
 .
-├── app.py                         # Streamlit entry point
 ├── backend/app/
-│   ├── api/server.py              # Versioned HTTP API
-│   ├── core/                      # Parsing, matching, scoring, and reports
-│   ├── models/                    # Domain and persistence models
-│   ├── schemas/                   # Request and response contracts
-│   └── services/                  # Analysis use cases
-├── frontend/
-│   ├── app.py                     # Frontend composition
-│   ├── api_client.py              # Backend client
-│   ├── components/                # Report and navigation UI
-│   ├── pages/                     # Candidate, admin, feedback, and about pages
-│   └── services/                  # PDF parsing and storage
-├── tests/                         # Unit, architecture, and API integration tests
-├── requirements/                  # Optional semantic and development extras
-├── Dockerfile
-├── nixpacks.toml
-└── pyproject.toml
+│   ├── api/                 # FastAPI routes and request boundary
+│   ├── core/                # Parsing, scoring, matching, and report generation
+│   ├── models/              # Domain records
+│   ├── schemas/             # Request and response models
+│   └── services/            # Analysis and PDF extraction use cases
+├── web/
+│   ├── src/components/      # Upload, navigation, and result views
+│   ├── src/api.js           # Browser API client
+│   ├── src/App.jsx          # Product workflow and state
+│   └── vite.config.js       # Local API proxy
+├── tests/                   # Python unit, API, OCR, and architecture checks
+├── images/                  # README product screenshots
+├── requirements/            # Development and optional semantic dependencies
+├── Dockerfile               # FastAPI container
+└── .github/workflows/       # Python, web, and container checks
 ```
-
-The frontend and backend are intentionally separate processes. The frontend calls the API through `BACKEND_API_URL`, which defaults to `http://127.0.0.1:8001`.
-
-### Request flow
 
 ```mermaid
-sequenceDiagram
-    actor Candidate
-    participant UI as Streamlit frontend
-    participant API as Versioned HTTP API
-    participant Core as Analysis core
-    participant Match as Lexical/embedding matcher
-    participant DB as SQLite/PostgreSQL
-
-    Candidate->>UI: Upload resume and paste JD
-    UI->>API: POST /api/v1/analyses
-    API->>Core: Parse, score, and inspect bullets
-    Core->>Match: Compare resume evidence with JD
-    Match-->>Core: Matches, gaps, and similarity
-    Core-->>API: Structured analysis
-    API-->>UI: JSON response
-    UI->>DB: Store analysis metadata
-    UI-->>Candidate: Report, evidence, gaps, and PDF
+flowchart LR
+    U[React workspace] -->|PDF upload| API[FastAPI]
+    API --> X[Native extraction]
+    X --> Q{Text quality}
+    Q -->|Usable| A[Analysis core]
+    Q -->|Weak page| O[Tesseract OCR]
+    O --> A
+    U -->|Job description| A
+    A --> R[Scores, evidence, gaps, suggestions]
+    R --> U
+    A --> P[PDF report]
 ```
 
-### Module responsibilities
-
-| Area | Responsibility |
-|---|---|
-| `backend/app/core` | Parsing, normalization, scoring, matching, evidence mapping, interview prompts, and PDF generation |
-| `backend/app/api` | HTTP routing, input validation, error contracts, and response serialization |
-| `backend/app/services` | Application-level analysis use cases |
-| `frontend/pages` | Candidate, results, admin, feedback, home, and about views |
-| `frontend/components` | Navigation, report rendering, styles, courses, and admin analytics |
-| `backend/app/services` | Analysis use cases and bounded PDF/OCR extraction |
-| `frontend/services` | PDF preview and privacy-minimized SQLite/PostgreSQL analytics |
-| `tests` | Unit, API, architecture, package, and navigation checks |
+The browser uses Vite's `/api` proxy during local development. The API performs extraction and analysis and returns structured JSON; the React workspace owns interaction state such as selected tabs and suggestion drafts.
 
 ## Getting started
 
-### Prerequisites
+### Requirements
 
 - Python 3.11 or newer
-- `pip` and `venv`
-- Tesseract 5 with English language data for scanned or image-only PDFs
+- Node.js 22 or newer
+- Tesseract 5 with English language data
 
 On macOS:
 
@@ -164,210 +101,143 @@ On macOS:
 brew install tesseract
 ```
 
-The Docker image installs Tesseract and its English language data automatically.
-Text-based PDFs do not require OCR; the application keeps their native text
-unless a page fails the extraction-quality check.
-
-### Installation
+### Install the API
 
 ```bash
-git clone https://github.com/rammohanrediee/AI-Resume-Analyzer.git
-cd AI-Resume-Analyzer
+git clone https://github.com/rammohanrediee/cvlens.git
+cd cvlens
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-Install the optional embedding model integration:
+Optional semantic matching:
 
 ```bash
-pip install -r requirements/semantic.txt
+python -m pip install -r requirements/semantic.txt
 ```
 
-Install development and coverage tools:
+### Install the web client
 
 ```bash
-pip install -r requirements/dev.txt
+cd web
+npm ci
+cd ..
 ```
 
-## Configuration
+## Run locally
 
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-| Variable | Required | Purpose |
-|---|---:|---|
-| `BACKEND_API_URL` | No | API base URL used by the Streamlit frontend |
-| `SQLITE_DB_PATH` | No | Local SQLite path; defaults to `data/resume_analyzer.db` |
-| `ANALYTICS_ENABLED` | No | Enables anonymous aggregate analytics; defaults to `false` |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | No | PostgreSQL connection settings; provide the complete set |
-| `HF_TOKEN` | No | Higher-rate Hugging Face model downloads |
-| `API_HOST`, `PORT` | No | Backend bind address and port |
-| `RESUME_API_KEY` | No | Enables bearer-token authentication for API POST requests |
-| `API_RATE_LIMIT_PER_MINUTE` | No | Per-client POST request limit; defaults to 60 |
-| `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH` | No | Admin login using a salted scrypt password hash |
-
-Never commit `.env`, `.streamlit/secrets.toml`, uploaded resumes, or local database files. They are excluded through `.gitignore`.
-
-Generate an admin password hash without putting the password in shell history:
-
-```bash
-python scripts/hash_admin_password.py
-```
-
-## Running locally
-
-Start the API in the first terminal:
+Start FastAPI in the first terminal:
 
 ```bash
 source .venv/bin/activate
 python -m backend.app.main
 ```
 
-Start Streamlit in a second terminal:
+Start React in the second terminal:
 
 ```bash
-source .venv/bin/activate
-streamlit run app.py
+cd web
+npm run dev
 ```
 
-Open `http://localhost:8501`. The API listens on `http://127.0.0.1:8001` by default.
-FastAPI provides interactive API documentation at `http://127.0.0.1:8001/docs` and
-the request/response schema at `/openapi.json`. Existing v1 URLs and the `data`/`error`
-envelopes remain compatible with the Streamlit client.
+Open `http://127.0.0.1:5173`. The API runs at `http://127.0.0.1:8001`, and its OpenAPI documentation is available at `http://127.0.0.1:8001/docs`.
 
-The API validates field types, enforces the 2 MiB JSON body limit even without a
-Content-Length header, and returns `X-Request-ID` on responses. Structured logs contain
-only the generated request ID, method, matched route template, status and duration.
-No raw paths, query strings, resume contents or credentials are logged by the API boundary.
+## Configuration
 
-The helper scripts launch each process independently:
+The backend reads process environment variables:
 
-```bash
-bash start-backend.sh   # API
-bash start.sh           # Streamlit frontend
+| Variable | Default | Purpose |
+|---|---|---|
+| `API_HOST` | `127.0.0.1` | API bind address |
+| `PORT` | `8001` | API port |
+| `RESUME_API_KEY` | empty | Requires a bearer token for POST requests when set |
+| `API_RATE_LIMIT_PER_MINUTE` | `60` | Per-client POST request limit |
+| `HF_TOKEN` | empty | Token for optional Hugging Face model downloads |
+
+The web client calls the same origin by default. `web/.env.example` therefore leaves the API base URL empty:
+
+```env
+VITE_API_BASE_URL=
 ```
+
+During local development, Vite proxies `/api` to port 8001. Production should route the same path to FastAPI through the site's reverse proxy.
 
 ## API
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/v1/health` | Service health check |
-| `POST` | `/api/v1/documents/extract` | Bounded PDF upload and text/OCR extraction |
-| `POST` | `/api/v1/analyses` | Complete resume and JD analysis |
+| `GET` | `/api/v1/health` | Service health |
+| `POST` | `/api/v1/documents/extract` | PDF text extraction and OCR |
+| `POST` | `/api/v1/analyses` | Complete resume and job-description analysis |
 | `POST` | `/api/v1/analyses/bullet-quality` | Bullet-quality review |
-| `POST` | `/api/v1/analyses/jd-gap` | Categorized JD gap analysis |
+| `POST` | `/api/v1/analyses/jd-gap` | Categorized job-description gaps |
 | `POST` | `/api/v1/analyses/interview-prep` | Interview-question generation |
-| `POST` | `/api/v1/reports/pdf` | PDF analysis report |
+| `POST` | `/api/v1/reports/pdf` | Downloadable PDF report |
 
-Example:
+Example health check:
 
 ```bash
-curl -X POST http://127.0.0.1:8001/api/v1/documents/extract \
-  -H "Authorization: Bearer $RESUME_API_KEY" \
-  -F "file=@resume.pdf;type=application/pdf"
-
-curl -X POST http://127.0.0.1:8001/api/v1/analyses \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $RESUME_API_KEY" \
-  -d '{
-    "candidate_name": "Asha",
-    "resume_text": "Skills: Python, SQL. Built a FastAPI service for analytics reporting.",
-    "resume_skills": ["Python", "SQL", "FastAPI"],
-    "job_description": "Seeking a data scientist with Python, SQL, model evaluation, and API deployment experience."
-  }'
+curl http://127.0.0.1:8001/api/v1/health
 ```
 
-## Testing
+## Development checks
 
-Run the complete suite and enforce the project coverage threshold:
+Python checks:
 
 ```bash
+python -m pip install -r requirements/dev.txt
+ruff check backend tests
 coverage run --source=backend.app -m unittest discover -s tests -v
 coverage report -m --fail-under=80
 ```
 
-The test suite covers:
+React checks:
 
-- bounded API uploads, native PDF extraction and text normalization;
-- weak-page OCR selection and fallback behavior;
-- real image-only PDF extraction through Tesseract;
-- privacy-minimized persistence, hashed admin passwords, and deletion;
-- API authentication, payload limits, rate limiting, and deployment configuration;
-- parsing, matching, ATS scoring, evidence mapping, and API behavior;
-- package architecture and frontend navigation.
+```bash
+cd web
+npm run lint
+npm run build
+```
 
-CI enforces at least 80% coverage of `backend.app`, runs Ruff and `pip-audit`,
-builds the Docker image, starts its backend container, and checks the live
-health endpoint.
-
-Test counts and coverage should be taken from the latest GitHub Actions run
-rather than manually maintained badges.
+GitHub Actions runs the Python checks, the React lint/build, a dependency audit, a Docker build, and a container health check.
 
 ## Deployment
 
-The repository includes `Dockerfile` and `nixpacks.toml` definitions suitable for container or Railway-style deployments.
+The Docker image and `nixpacks.toml` run the FastAPI service on port 8001:
 
-Because the frontend and API are separate processes, production deployment should run them as two services:
+```bash
+docker build -t cvlens-api .
+docker run --rm -p 8001:8001 cvlens-api
+```
 
-1. Backend service: `bash start-backend.sh`
-2. Frontend service: `bash start.sh`
-3. Frontend environment: set `BACKEND_API_URL` to the public backend URL
-4. Backend environment: set `API_HOST=0.0.0.0`, `PORT`, and a strong `RESUME_API_KEY`
+Build the React client separately:
 
-Use PostgreSQL instead of local SQLite when multiple instances or persistent shared analytics are required.
+```bash
+cd web
+npm ci
+npm run build
+```
 
-## Privacy and responsible use
+Deploy `web/dist/` with a static host or reverse proxy. Route `/api` to the FastAPI service so the browser and API share an origin.
 
-Resume content and uploaded PDF bytes stay in the active Streamlit session and
-are not written to the analytics database. Analytics are disabled by default.
-When explicitly enabled, only anonymous aggregate fields are stored: score,
-page count, role track, candidate level, detected/recommended skills, courses,
-and timestamp.
+## Privacy and limits
 
-For non-local deployments:
-
-- Use TLS and access controls.
-- Keep secrets in the deployment platform's secret manager.
-- Define retention rules for anonymous analysis events.
-- Use the admin deletion control to purge current analytics and legacy
-  `user_data`/`user_feedback` tables.
-- Avoid logging raw resume text or credentials.
-- Treat all match scores as guidance, not hiring decisions.
-- Review generated suggestions before using them in an application.
-
-## Limitations
-
-- PDF extraction quality depends on the source document's structure and embedded fonts.
+- Uploaded PDF bytes and resume text are processed for the active request and are not persisted by this repository.
+- Local suggestion drafts stay in browser memory and do not modify the uploaded PDF.
+- Request size, PDF size, page count, and extracted-text limits are enforced by the API.
+- PDF quality depends on the source document's layout and embedded fonts.
 - Keyword and embedding similarity do not prove proficiency or job readiness.
-- The tool does not emulate proprietary ATS ranking algorithms.
-- Suggested bullet rewrites require human verification; users should never add unsupported metrics.
-- Semantic results depend on the quality and specificity of both the resume and JD.
-- The API runs on Uvicorn. Use TLS and deployment-level resource limits for public use.
-  The in-memory rate limiter is per process; multi-worker deployments need a shared
-  gateway limiter. Proxy headers are deliberately not trusted by the CLI launcher.
+- Suggested rewrites require human review; never add unsupported claims or metrics.
 
-## Contributing
+## Project lineage
 
-Issues and focused pull requests are welcome. Before submitting a change:
+CVLens is based on [Deepak Padhi's AI Resume Analyzer](https://github.com/deepakpadhi986/AI-Resume-Analyzer), used under the MIT License. The current repository adds the React product workspace, FastAPI boundary, bounded PDF/OCR extraction, evidence-backed job matching, report generation, automated checks, and deployment configuration.
 
-1. Keep analysis logic deterministic where practical.
-2. Add or update tests for behavior changes.
-3. Run the full test and coverage commands.
-4. Do not commit resumes, credentials, databases, model caches, or generated reports.
+See [CONTRIBUTIONS.md](CONTRIBUTIONS.md), [NOTICE](NOTICE), and [LICENSE](LICENSE) for attribution and license details.
 
 ## License
 
-This project is available under the [MIT License](LICENSE). The license permits use, copying, modification, distribution, sublicensing, and sale, provided the copyright and permission notice are retained.
-
-The repository retains the required upstream copyright notice:
-
-> Copyright (c) 2022 Deepak Padhi
-
-New re-architecture work is documented in [NOTICE](NOTICE) and
-[CONTRIBUTIONS.md](CONTRIBUTIONS.md). See [LICENSE](LICENSE) for the complete
-terms and warranty disclaimer.
+CVLens is available under the [MIT License](LICENSE). The upstream copyright and permission notice are retained.

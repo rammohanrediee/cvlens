@@ -1,4 +1,4 @@
-AI Resume Analyzer
+CVLens
 
 This software is based on AI Resume Analyzer by Deepak Padhi:
 https://github.com/deepakpadhi986/AI-Resume-Analyzer
@@ -6,10 +6,9 @@ https://github.com/deepakpadhi986/AI-Resume-Analyzer
 The upstream software is used under the MIT License. Its copyright notice is
 preserved in LICENSE.
 
-Re-architecture and additional features:
+Current implementation work:
 Copyright (c) 2026 Ram Mohan Reddy
 
-Additional work includes the modular frontend/backend architecture, versioned
-HTTP API, evidence-backed job-description matching, deterministic and optional
-embedding matchers, PDF reporting, SQLite/PostgreSQL storage adapter, automated
-tests, and deployment configuration.
+Additional work includes the React product workspace, FastAPI service, bounded
+PDF and OCR extraction, evidence-backed job matching, deterministic and optional
+embedding matchers, PDF reporting, automated checks, and deployment configuration.
