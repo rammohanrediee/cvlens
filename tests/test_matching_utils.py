@@ -57,6 +57,15 @@ class MatchingUtilsTests(unittest.TestCase):
         self.assertGreaterEqual(score, 70)
         self.assertTrue(any(check["label"] == "Projects" and check["matched"] for check in checks))
 
+    def test_optional_sections_are_neutral_when_scoring(self):
+        required_only = "Summary\nEducation\nSkills"
+        base_score, checks = evaluate_resume_score(required_only)
+        score_with_hobbies, _ = evaluate_resume_score(f"{required_only}\nHobbies")
+        hobbies = next(check for check in checks if check["key"] == "hobbies")
+
+        self.assertEqual(score_with_hobbies, base_score)
+        self.assertFalse(hobbies["required"])
+
     def test_candidate_level_prefers_experience_signal(self):
         self.assertEqual(infer_candidate_level(0, ""), "NA")
         self.assertEqual(infer_candidate_level(2, "Work Experience with backend ownership"), "Experienced")

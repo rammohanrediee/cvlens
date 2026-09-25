@@ -298,7 +298,7 @@ SECTION_RULES = [
         "patterns": ["objective", "career objective", "professional summary", "summary", "profile", "about me"],
         "fallback": None,
         "success": "You have added an objective or summary section.",
-        "warning": "Add a sharp summary tailored to the role you want.",
+        "warning": "Add a summary with your role, experience, and strongest relevant skills.",
     },
     {
         "key": "education",
@@ -342,7 +342,7 @@ SECTION_RULES = [
         "patterns": ["skill", "skills", "technical skills", "core competencies", "technical expertise", "tech stack", "technologies"],
         "fallback": None,
         "success": "You have included a skills section.",
-        "warning": "Add a focused skills section tailored to your target role.",
+        "warning": "Add a skills section with tools used in your experience.",
     },
     {
         "key": "hobbies",

@@ -14,7 +14,7 @@ class ResumeTextRequest(BaseModel):
 
 
 class AnalysisRequest(ResumeTextRequest):
-    candidate_name: str = "Candidate"
+    candidate_name: str = ""
     resume_skills: list[str] = Field(default_factory=list)
     job_description: str = ""
     page_count: Annotated[int, Field(ge=1, le=100)] | None = None

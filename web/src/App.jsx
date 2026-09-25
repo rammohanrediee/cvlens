@@ -7,6 +7,12 @@ import UploadView from './components/UploadView.jsx'
 const MAX_PDF_BYTES = 5 * 1024 * 1024
 const MIN_JOB_DESCRIPTION_LENGTH = 30
 
+function initialTheme() {
+  const current = document.documentElement.dataset.theme
+  if (current === 'light' || current === 'dark') return current
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
 function fileKey(file) {
   return file ? `${file.name}:${file.size}:${file.lastModified}` : ''
 }
@@ -14,7 +20,6 @@ function fileKey(file) {
 function App() {
   const [file, setFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
-  const [candidateName, setCandidateName] = useState('')
   const [jobDescription, setJobDescription] = useState('')
   const [analysis, setAnalysis] = useState(null)
   const [analysisPayload, setAnalysisPayload] = useState(null)
@@ -26,6 +31,7 @@ function App() {
   const [reportStage, setReportStage] = useState('idle')
   const [reportError, setReportError] = useState('')
   const [suggestionDrafts, setSuggestionDrafts] = useState({})
+  const [theme, setTheme] = useState(initialTheme)
   const extractionCache = useRef({ key: '', data: null })
   const activeRequest = useRef(0)
   const abortController = useRef(null)
@@ -41,6 +47,12 @@ function App() {
     })
     return () => controller.abort()
   }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    document.documentElement.style.colorScheme = theme
+    try { window.localStorage.setItem('cvlens-theme', theme) } catch { /* Storage may be unavailable. */ }
+  }, [theme])
 
   useEffect(() => () => {
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
@@ -127,7 +139,6 @@ function App() {
       }
       setStage('analyzing')
       const payload = {
-        candidate_name: candidateName.trim() || 'Candidate',
         resume_text: extraction.text,
         resume_skills: [],
         job_description: trimmedJobDescription,
@@ -181,7 +192,6 @@ function App() {
     if (fileInput.current) fileInput.current.value = ''
     setDocumentPreview(null)
     setFile(null)
-    setCandidateName('')
     setJobDescription('')
     setAnalysis(null)
     setAnalysisPayload(null)
@@ -213,18 +223,16 @@ function App() {
       <AppHeader onNavigate={navigate} onJobMatch={() => {
         if (analysis) { setActiveTab('keywords'); navigate('results') }
         else { navigate('analyze'); document.getElementById('job-description')?.focus() }
-      }} serviceStatus={serviceStatus} />
+      }} theme={theme} onThemeChange={() => setTheme(current => current === 'dark' ? 'light' : 'dark')} />
       <main className="app-content" id="app-content">
         {currentView === 'analyze' ? (
           <UploadView
             analysisExists={Boolean(analysis)}
             busy={busy}
-            candidateName={candidateName}
             error={error}
             file={file}
             inputRef={fileInput}
             jobDescription={jobDescription}
-            onCandidateChange={setCandidateName}
             onFileSelect={selectFile}
             onJobChange={setJobDescription}
             onReset={resetSession}
@@ -251,7 +259,7 @@ function App() {
           />
         )}
       </main>
-      <footer className="product-footer"><span>ResumeAI · Structure, evidence, next steps.</span><a href="https://github.com/rammohanrediee/AI-Resume-Analyzer" target="_blank" rel="noreferrer">About this project ↗</a></footer>
+      <footer className="product-footer"><span>cvLens</span><a href="https://github.com/rammohanrediee/cvlens" target="_blank" rel="noreferrer">GitHub ↗</a></footer>
     </div>
   )
 }

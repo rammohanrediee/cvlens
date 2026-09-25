@@ -81,6 +81,8 @@ PDF_FONT_PATH = Path(__file__).resolve().parents[1] / "assets" / "fonts" / "BBHB
 def build_section_category_scores(score_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[str, dict[str, Any]] = {}
     for check in score_checks:
+        if not check.get("required", True):
+            continue
         category = SECTION_CATEGORY_MAP.get(check["label"], "Core Sections")
         if category not in grouped:
             grouped[category] = {
@@ -331,7 +333,7 @@ def build_full_analysis(resume_data: dict[str, Any], resume_text: str, job_descr
     )
     gap_explainer = build_gap_explainer(job_description, resume_text, resume_skills) if normalize_text(job_description) else {
         "categorized_missing_keywords": {},
-        "summary": "Add a target job description to unlock gap analysis.",
+        "summary": "Add a job description to compare role requirements.",
     }
     requirement_evidence = build_requirement_evidence_matrix(
         job_description,

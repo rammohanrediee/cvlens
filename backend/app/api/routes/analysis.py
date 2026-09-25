@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1")
 
 @router.get("/health")
 def health():
-    return {"data": {"status": "ok", "service": "resume-analysis-api", "version": "v1"}}
+    return {"data": {"status": "ok", "service": "cvlens-api", "version": "v1"}}
 
 
 @router.post("/analyses", response_model=AnalysisResponse)
