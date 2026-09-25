@@ -3,7 +3,7 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PORT=8501
+    PORT=8001
 
 WORKDIR /app
 
@@ -18,8 +18,8 @@ RUN apt-get update && \
 COPY . /app
 
 RUN python -m pip install . && \
-    chmod +x /app/start.sh && mkdir -p /app/data/uploads
+    chmod +x /app/start-backend.sh
 
-EXPOSE 8501
+EXPOSE 8001
 
-CMD ["bash", "/app/start.sh"]
+CMD ["bash", "/app/start-backend.sh"]

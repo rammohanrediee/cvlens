@@ -10,10 +10,9 @@ __pycache__/
 .coverage
 htmlcov/
 .DS_Store
-App/.env
-App/.streamlit
-App/Uploaded_Resumes
-tests/__pycache__
-pyresparser/__pycache__
-resume_analyzer.db
-App/resume_analyzer.db
+.env
+web/node_modules
+web/dist
+output
+.playwright-cli
+data/*.db

@@ -1,4 +1,6 @@
+import json
 import unittest
+from pathlib import Path
 
 
 class ArchitectureTests(unittest.TestCase):
@@ -13,13 +15,13 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual(AnalysisRequest(resume_text="Text").resume_text, "Text")
         self.assertEqual(AnalysisRecord(candidate_name="Asha").candidate_name, "Asha")
 
-    def test_frontend_client_targets_backend_api(self):
-        from frontend.api_client import ResumeAnalyzerClient
+    def test_react_workspace_declares_build_and_lint_commands(self):
+        package_file = Path(__file__).resolve().parents[1] / "web" / "package.json"
+        package = json.loads(package_file.read_text())
 
-        client = ResumeAnalyzerClient("http://127.0.0.1:8001")
-        self.assertEqual(client.base_url, "http://127.0.0.1:8001")
-        self.assertTrue(callable(client.analyze))
-        self.assertTrue(callable(client.download_report))
+        self.assertEqual(package["scripts"]["build"], "vite build")
+        self.assertEqual(package["scripts"]["lint"], "oxlint")
+        self.assertIn("react", package["dependencies"])
 
 
 if __name__ == "__main__":

@@ -5,21 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "resume-analyzer"
 version = "1.0.0"
-description = "ATS-style resume analysis with a Streamlit UI and HTTP API."
+description = "ATS-style resume analysis with a React workspace and FastAPI service."
 readme = "README.md"
 requires-python = ">=3.11"
 dynamic = ["dependencies"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["backend*", "frontend*"]
+include = ["backend*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools.package-data]
 backend = ["app/assets/fonts/*.ttf", "app/assets/fonts/*.txt"]
-frontend = ["assets/fonts/*.ttf", "assets/fonts/*.txt", "assets/images/*.png"]
 
 [tool.ruff]
 line-length = 120

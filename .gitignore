@@ -28,8 +28,6 @@ data/uploads/
 *.db
 *.sqlite3
 
-.streamlit/secrets.toml
-
 # Local design and development artifacts
 /.hallmark/
 /docs/
