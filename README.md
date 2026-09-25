@@ -1,4 +1,4 @@
-# CVLens
+# cvLens
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![React 19](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)](https://react.dev/)
@@ -6,7 +6,7 @@
 [![Tests](https://github.com/rammohanrediee/cvlens/actions/workflows/tests.yml/badge.svg)](https://github.com/rammohanrediee/cvlens/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-216B4B.svg)](LICENSE)
 
-CVLens is a responsive resume analysis workspace built with React and FastAPI. It extracts text from PDF resumes, checks document structure and bullet quality, compares resume evidence with a pasted job description, and generates a downloadable analysis report.
+cvLens is a responsive resume review workspace built with React and FastAPI. It extracts text from PDF resumes, checks document structure and bullet quality, compares resume evidence with a pasted job description, and generates a downloadable report.
 
 Scores and suggestions are decision support. They do not reproduce a specific employer's applicant tracking system or guarantee an interview.
 
@@ -14,11 +14,11 @@ Scores and suggestions are decision support. They do not reproduce a specific em
 
 ### Resume upload
 
-![CVLens resume upload workspace](images/cvlens-upload.png)
+![cvLens resume upload workspace](images/cvlens-upload.png)
 
 ### Analysis workspace
 
-![CVLens analysis overview](images/cvlens-analysis.png)
+![cvLens analysis overview](images/cvlens-analysis.png)
 
 ## What it does
 
@@ -228,4 +228,4 @@ Deploy `web/dist/` with a static host or reverse proxy. Route `/api` to the Fast
 
 ## License
 
-CVLens is available under the [MIT License](LICENSE). The upstream copyright and permission notice are retained.
+cvLens is available under the [MIT License](LICENSE). The upstream copyright and permission notice are retained.

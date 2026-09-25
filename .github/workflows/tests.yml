@@ -48,14 +48,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        run: docker build -t resume-analyzer:test .
+        run: docker build -t cvlens-api:test .
       - name: Start backend
-        run: docker run -d --name resume-analyzer-api -e API_HOST=0.0.0.0 -e PORT=8001 -p 8001:8001 resume-analyzer:test bash start-backend.sh
+        run: docker run -d --name cvlens-api -e API_HOST=0.0.0.0 -e PORT=8001 -p 8001:8001 cvlens-api:test bash start-backend.sh
       - name: Verify health endpoint
         run: |
           for attempt in 1 2 3 4 5; do
             curl --fail http://127.0.0.1:8001/api/v1/health && exit 0
             sleep 2
           done
-          docker logs resume-analyzer-api
+          docker logs cvlens-api
           exit 1

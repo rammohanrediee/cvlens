@@ -2,7 +2,7 @@
 
 ## Upstream
 
-CVLens is based on [Deepak Padhi's AI Resume Analyzer](https://github.com/deepakpadhi986/AI-Resume-Analyzer), distributed under the MIT License. The upstream project established the resume-analysis concept, initial parsing foundation, recommendation data, and early candidate workflow. Its copyright notice remains in `LICENSE`.
+cvLens is based on [Deepak Padhi's AI Resume Analyzer](https://github.com/deepakpadhi986/AI-Resume-Analyzer), distributed under the MIT License. The upstream project established the resume-analysis concept, initial parsing foundation, recommendation data, and early candidate workflow. Its copyright notice remains in `LICENSE`.
 
 ## Current implementation
 
