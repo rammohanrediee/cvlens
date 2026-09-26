@@ -148,8 +148,13 @@ The backend reads process environment variables:
 | `API_HOST` | `127.0.0.1` | API bind address |
 | `PORT` | `8001` | API port |
 | `RESUME_API_KEY` | empty | Requires a bearer token for POST requests when set |
+| `ALLOW_UNAUTHENTICATED_POSTS` | empty | Explicitly permits anonymous POST requests on a non-loopback bind |
 | `API_RATE_LIMIT_PER_MINUTE` | `60` | Per-client POST request limit |
 | `HF_TOKEN` | empty | Token for optional Hugging Face model downloads |
+| `OPENROUTER_API_KEY` | empty | Server-side OpenRouter key used only after the user selects enhanced AI review |
+| `OPENROUTER_MODEL` | `z-ai/glm-5.3-flash` | OpenRouter model slug for grounded resume analysis |
+| `OPENROUTER_SITE_URL` | empty | Optional public site URL for OpenRouter app attribution |
+| `OPENROUTER_APP_TITLE` | `cvLens` | Application title sent to OpenRouter |
 
 The web client calls the same origin by default. `web/.env.example` therefore leaves the API base URL empty:
 
@@ -158,6 +163,24 @@ VITE_API_BASE_URL=
 ```
 
 During local development, Vite proxies `/api` to port 8001. Production should route the same path to FastAPI through the site's reverse proxy.
+
+Keyless POST requests are allowed automatically only on loopback. A public bind must either set `RESUME_API_KEY` or explicitly set `ALLOW_UNAUTHENTICATED_POSTS=true`. For an authenticated same-origin web deployment, keep the backend private and configure the trusted reverse proxy to discard client-supplied `Authorization` headers before injecting the backend bearer token. Never place `RESUME_API_KEY` in a `VITE_*` variable because browser bundles are public.
+
+Use `python -m backend.app.main` as the supported launcher so the effective bind host is validated. ASGI factory deployments must set `RESUME_API_KEY` or `ALLOW_UNAUTHENTICATED_POSTS=true` because the factory cannot safely infer a server CLI `--host` override.
+
+The in-process rate limiter is a final circuit breaker keyed to the immediate network peer. A production reverse proxy or API gateway must enforce authoritative client-aware rate, concurrency, body-size, and timeout limits; multi-replica deployments should not treat the process-local limiter as a global quota.
+
+### Enhanced AI review
+
+Set the OpenRouter key in the backend process environment; never place it in a `VITE_*` variable or browser storage:
+
+```bash
+export OPENROUTER_API_KEY="your-key"
+export OPENROUTER_MODEL="z-ai/glm-5.3-flash"
+python -m backend.app.main
+```
+
+Enhanced review is opt-in in the upload form. When selected, the backend removes email addresses, phone numbers, and URLs, limits the submitted text, then sends the resume text, job description, and extracted bullets to OpenRouter. Provider output must satisfy a strict JSON schema, quote evidence from an exact resume line, reference a real extracted bullet, and introduce no new numeric claim. Invalid or unavailable AI output is discarded and the deterministic review remains visible.
 
 ## API
 
