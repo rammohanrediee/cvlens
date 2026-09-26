@@ -1,6 +1,8 @@
 import os
 import re
+import threading
 from collections import Counter
+from functools import lru_cache
 from .analysis_data import ROLE_CATALOG, SECTION_RULES, SKILL_ONTOLOGY
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
@@ -10,6 +12,11 @@ stopwords = ENGLISH_STOP_WORDS | CUSTOM_STOPWORDS
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 TOKEN_PATTERN = re.compile(r"[a-zA-Z][a-zA-Z0-9+#./-]{1,}")
 WORD_BOUNDARY_TEMPLATE = r"(?<![a-z0-9]){}(?![a-z0-9])"
+SEMANTIC_INFERENCE_CONCURRENCY = 2
+_SEMANTIC_INFERENCE_SEMAPHORE = threading.BoundedSemaphore(SEMANTIC_INFERENCE_CONCURRENCY)
+_VECTOR_INDEX_BUILD_LOCK = threading.Lock()
+_VECTOR_INDEXES = None
+_VECTOR_INDEX_ERROR = None
 
 
 def normalize_text(text):
@@ -18,6 +25,24 @@ def normalize_text(text):
 
 def normalize_token(text):
     return re.sub(r"[^a-z0-9+#]+", " ", (text or "").lower()).strip()
+
+
+def contains_term(text, term):
+    normalized_text = normalize_text(text).lower()
+    normalized_term = normalize_text(term).lower()
+    if not normalized_text or not normalized_term:
+        return False
+    pattern = WORD_BOUNDARY_TEMPLATE.format(re.escape(normalized_term))
+    return re.search(pattern, normalized_text) is not None
+
+
+def _has_section_heading(resume_text, patterns):
+    headings = {
+        normalize_text(line).lower().rstrip(":").strip()
+        for line in (resume_text or "").splitlines()
+        if normalize_text(line)
+    }
+    return any(pattern.lower() in headings for pattern in patterns)
 
 
 def extract_keywords(text):
@@ -110,11 +135,11 @@ def evaluate_resume_score(resume_text):
     score = 0
     checks = []
     lowered = normalize_text(resume_text or "").lower()
-    bullet_hits = len(re.findall(r"^\s*[\-\*\u2022\u25cf]", resume_text or "", re.MULTILINE))
+    bullet_hits = len(
+        re.findall(r"^\s*(?:[\-\*\u2022\u25cf]|\d{1,2}[.)])\s+", resume_text or "", re.MULTILINE)
+    )
     for rule in SECTION_RULES:
-        matched = any(
-            re.search(WORD_BOUNDARY_TEMPLATE.format(re.escape(pattern)), lowered) for pattern in rule["patterns"]
-        )
+        matched = _has_section_heading(resume_text, rule["patterns"])
         awarded_score = 0
         matched_by = None
         if matched:
@@ -177,10 +202,15 @@ def infer_candidate_level(page_count, resume_text):
     max_years = max(year_matches) if year_matches else 0
     project_hits = len(re.findall(r"\b(project|projects)\b", lowered))
     internship_hits = len(re.findall(r"\b(internship|internships|intern)\b", lowered))
-    experience_hits = len(re.findall(r"\b(experience|employment|work experience)\b", lowered))
-    if max_years >= 4 or experience_hits:
+    seniority_signal = re.search(
+        r"\b(?:senior|lead|principal)\s+(?:engineer|developer|analyst|scientist|designer|manager|"
+        r"architect|consultant|specialist)\b",
+        lowered,
+    )
+    experience_heading = _has_section_heading(resume_text, ["experience", "work experience", "employment"])
+    if max_years >= 4 or seniority_signal:
         return "Experienced"
-    if max_years >= 1 or internship_hits or project_hits >= 2:
+    if max_years >= 1 or internship_hits or project_hits >= 2 or experience_heading:
         return "Intermediate"
     return "Fresher"
 
@@ -189,10 +219,7 @@ def infer_role_from_skills(skills, resume_text=""):
     resume_evidence = extract_resume_evidence(resume_text, skills)
     normalized_skills = {normalize_token(skill) for skill in resume_evidence.keys()}
     resume_text_lower = normalize_text(resume_text).lower()
-    best_role = None
-    best_score = 0
-    best_matching = []
-    best_missing = []
+    scored_roles = []
     for role in ROLE_CATALOG:
         role_score = 0
         matched_keywords = []
@@ -203,26 +230,31 @@ def infer_role_from_skills(skills, resume_text=""):
             if normalize_keyword in normalized_skills:
                 role_score += 2
                 matched_keywords.append(canonical_keyword)
-            elif keyword.lower() in resume_text_lower:
+            elif contains_term(resume_text_lower, keyword):
                 role_score += 1
                 matched_keywords.append(keyword)
-        if role_score > best_score:
-            best_score = role_score
-            best_role = role
-            best_matching = matched_keywords
-            best_missing = [
-                canonicalize_skill(keyword)
-                for keyword in role["keywords"]
-                if normalize_token(canonicalize_skill(keyword)) not in normalized_skills
-            ]
-    if not best_role:
-        fallback_role = ROLE_CATALOG[0]
+        missing_keywords = [
+            canonicalize_skill(keyword)
+            for keyword in role["keywords"]
+            if normalize_token(canonicalize_skill(keyword)) not in normalized_skills
+        ]
+        scored_roles.append((role_score, role, matched_keywords, missing_keywords))
+
+    scored_roles.sort(key=lambda item: item[0], reverse=True)
+    best_score, best_role, best_matching, best_missing = scored_roles[0]
+    second_score = scored_roles[1][0] if len(scored_roles) > 1 else -1
+    if best_score == 0 or best_score == second_score:
+        reason = (
+            "Using a general fallback because the resume skills were sparse."
+            if best_score == 0
+            else "Role signals are ambiguous across multiple career tracks."
+        )
         return {
-            "title": fallback_role["title"],
+            "title": "Role not determined",
             "field": "General",
-            "recommended_skills": fallback_role["recommended_skills"],
-            "courses_key": fallback_role["courses_key"],
-            "match_reason": ("Using a general fallback because the resume skills were sparse."),
+            "recommended_skills": [],
+            "courses_key": None,
+            "match_reason": reason,
         }
     recommended = []
     for skill in best_missing + best_role["recommended_skills"]:
@@ -265,6 +297,7 @@ def _fallback_similarity(query_text, candidate_text):
     return len(query_tokens.intersection(candidate_tokens)) / len(query_tokens)
 
 
+@lru_cache(maxsize=1)
 def load_embedding_model():
     from sentence_transformers import SentenceTransformer
 
@@ -274,7 +307,7 @@ def load_embedding_model():
     return SentenceTransformer(EMBEDDING_MODEL_NAME)
 
 
-def build_vector_indexes():
+def _build_vector_indexes():
     model = load_embedding_model()
     role_doc = []
     skill_doc = []
@@ -297,16 +330,54 @@ def build_vector_indexes():
     }
 
 
+def build_vector_indexes():
+    """Build the semantic index once, including one stable failure result."""
+    global _VECTOR_INDEXES, _VECTOR_INDEX_ERROR
+
+    if _VECTOR_INDEXES is not None:
+        return _VECTOR_INDEXES
+    if _VECTOR_INDEX_ERROR is not None:
+        raise _VECTOR_INDEX_ERROR
+
+    with _VECTOR_INDEX_BUILD_LOCK:
+        if _VECTOR_INDEXES is not None:
+            return _VECTOR_INDEXES
+        if _VECTOR_INDEX_ERROR is not None:
+            raise _VECTOR_INDEX_ERROR
+        try:
+            _VECTOR_INDEXES = _build_vector_indexes()
+        except Exception:
+            _VECTOR_INDEX_ERROR = RuntimeError("Semantic index initialization is unavailable.")
+            raise _VECTOR_INDEX_ERROR from None
+        return _VECTOR_INDEXES
+
+
+def reset_vector_indexes_cache():
+    """Reset semantic initialization state for tests or controlled reloads."""
+    global _VECTOR_INDEXES, _VECTOR_INDEX_ERROR
+
+    with _VECTOR_INDEX_BUILD_LOCK:
+        _VECTOR_INDEXES = None
+        _VECTOR_INDEX_ERROR = None
+        load_embedding_model.cache_clear()
+
+
 def compute_semantic_matches(job_description, resume_text, resume_skills, top_k=3):
     normalized_job = normalize_text(job_description)
     normalized_resume = normalize_text(resume_text)
     resume_evidence = extract_resume_evidence(resume_text, resume_skills)
     resume_skill_set = {skill.lower() for skill in resume_evidence.keys()}
+    job_skill_set = {skill.lower() for skill in extract_resume_evidence(job_description, {}).keys()}
+
+    matching_method = "semantic_embedding"
+    similarity_label = "semantic similarity"
+    matching_warning = None
 
     try:
         indexes = build_vector_indexes()
         model = indexes["model"]
-        job_vector, resume_vector = model.encode([normalized_job, normalized_resume], convert_to_numpy=True)
+        with _SEMANTIC_INFERENCE_SEMAPHORE:
+            job_vector, resume_vector = model.encode([normalized_job, normalized_resume], convert_to_numpy=True)
         role_matches = []
         for role, role_vector in zip(ROLE_CATALOG, indexes["role_vectors"], strict=True):
             job_score = cosine_similarity(job_vector, role_vector)
@@ -333,6 +404,8 @@ def compute_semantic_matches(job_description, resume_text, resume_skills, top_k=
         for score, entry in ranked_skills:
             if score < 0.22:
                 continue
+            if entry["name"].lower() not in job_skill_set:
+                continue
             present = entry["name"].lower() in resume_skill_set
             jd_skill_matches.append(
                 {
@@ -346,6 +419,9 @@ def compute_semantic_matches(job_description, resume_text, resume_skills, top_k=
                 missing_keywords.append(entry["name"])
         resume_job_similarity = cosine_similarity(job_vector, resume_vector)
     except Exception:
+        matching_method = "lexical_fallback"
+        similarity_label = "keyword coverage"
+        matching_warning = "Semantic matching is unavailable; results use deterministic keyword coverage."
         role_matches = []
         for role in ROLE_CATALOG:
             role_document = f"{role['title']} {role['summary']} {' '.join(role['keywords'])}"
@@ -370,6 +446,8 @@ def compute_semantic_matches(job_description, resume_text, resume_skills, top_k=
         jd_skill_matches = []
         missing_keywords = []
         for entry in SKILL_ONTOLOGY:
+            if entry["name"].lower() not in job_skill_set:
+                continue
             score = _fallback_similarity(
                 normalized_job,
                 f"{entry['name']} {' '.join(entry.get('aliases', []))}",
@@ -399,6 +477,9 @@ def compute_semantic_matches(job_description, resume_text, resume_skills, top_k=
     merged_priority = list(dict.fromkeys([*priority_keywords, *lexical_priority]))
     return {
         "resume_job_similarity": round(resume_job_similarity * 100, 1),
+        "matching_method": matching_method,
+        "similarity_label": similarity_label,
+        "matching_warning": matching_warning,
         "role_matches": role_matches[:top_k],
         "jd_skill_matches": jd_skill_matches[:12],
         "resume_skill_evidence": list(resume_evidence.values()),

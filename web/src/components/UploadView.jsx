@@ -3,7 +3,8 @@ import { Icon } from './Icon.jsx'
 
 export default function UploadView({
   analysisExists, busy, error, file, inputRef, jobDescription,
-  onFileSelect, onJobChange, onReset, onSubmit, onViewResults, serviceStatus, stageMessage,
+  onFileSelect, onJobChange, onReset, onSubmit, onUseAiAnalysisChange, onViewResults,
+  serviceStatus, stageMessage, useAiAnalysis,
 }) {
   const [dragging, setDragging] = useState(false)
   const [jobTouched, setJobTouched] = useState(false)
@@ -46,6 +47,16 @@ export default function UploadView({
           <textarea id="job-description" value={jobDescription} onChange={(event) => onJobChange(event.target.value)} onBlur={() => setJobTouched(true)} rows="3" maxLength="20000" placeholder="Paste the job description" aria-describedby="job-help" aria-invalid={showJobError} disabled={busy} />
           <p className={showJobError ? 'field-help field-help--error' : 'field-help'} id="job-help">{showJobError ? 'Use at least 30 characters, or leave this field blank.' : 'Add a job description to compare skills and experience with the role.'}</p>
         </div>
+
+        <label className="ai-consent">
+          <input
+            type="checkbox"
+            checked={useAiAnalysis}
+            onChange={(event) => onUseAiAnalysisChange(event.target.checked)}
+            disabled={busy}
+          />
+          <span><strong>Use enhanced AI review</strong><small>Sends redacted resume text and the job description to OpenRouter using GLM‑5.3‑Flash. Email addresses, phone numbers, and URLs are removed first.</small></span>
+        </label>
 
         <div className="submission-status" aria-live="polite">
           {error ? <p className="message message--error"><Icon name="alert" size={18} /><span>{error}</span></p> : null}

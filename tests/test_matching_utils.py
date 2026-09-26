@@ -1,7 +1,10 @@
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier, Lock
 from unittest.mock import patch
 
 from backend.app.core.matching import (
+    build_vector_indexes,
     canonicalize_skills,
     compute_semantic_matches,
     cosine_similarity,
@@ -9,6 +12,7 @@ from backend.app.core.matching import (
     extract_resume_evidence,
     infer_candidate_level,
     infer_role_from_skills,
+    reset_vector_indexes_cache,
 )
 from backend.app.core.analysis_data import ROLE_CATALOG, SECTION_RULES, SKILL_ONTOLOGY
 
@@ -41,8 +45,15 @@ class MatchingUtilsTests(unittest.TestCase):
         _, checks = evaluate_resume_score("- Built a service\n- Improved reliability")
         by_label = {check["label"]: check for check in checks}
 
-        self.assertEqual(by_label["Experience"]["matched_by"], "bullet_fallback")
-        self.assertEqual(by_label["Projects"]["matched_by"], "bullet_fallback")
+        self.assertFalse(by_label["Experience"]["matched"])
+        self.assertFalse(by_label["Projects"]["matched"])
+
+    def test_section_detection_requires_a_heading_instead_of_prose_mentions(self):
+        resume_text = "Education matters, and skills grow through every project experience."
+        _, checks = evaluate_resume_score(resume_text)
+        matched_keys = {check["key"] for check in checks if check["matched"]}
+
+        self.assertEqual(matched_keys, set())
 
     def test_resume_score_rewards_detected_sections(self):
         resume_text = """
@@ -68,7 +79,9 @@ class MatchingUtilsTests(unittest.TestCase):
 
     def test_candidate_level_prefers_experience_signal(self):
         self.assertEqual(infer_candidate_level(0, ""), "NA")
-        self.assertEqual(infer_candidate_level(2, "Work Experience with backend ownership"), "Experienced")
+        self.assertEqual(infer_candidate_level(2, "Work Experience\nBackend ownership"), "Intermediate")
+        self.assertEqual(infer_candidate_level(2, "Senior engineer with 6 years of experience"), "Experienced")
+        self.assertEqual(infer_candidate_level(1, "I have no professional experience and seek my first role"), "Fresher")
         self.assertEqual(infer_candidate_level(1, "Internship at a startup"), "Intermediate")
         self.assertEqual(infer_candidate_level(1, "Portfolio and education details only"), "Fresher")
 
@@ -80,6 +93,12 @@ class MatchingUtilsTests(unittest.TestCase):
     def test_role_inference_has_sparse_resume_fallback(self):
         result = infer_role_from_skills([], "")
         self.assertEqual(result["field"], "General")
+        self.assertEqual(result["title"], "Role not determined")
+
+    def test_role_inference_does_not_overstate_an_ambiguous_single_skill(self):
+        result = infer_role_from_skills(["Python"], "Python")
+        self.assertEqual(result["field"], "General")
+        self.assertIn("ambiguous", result["match_reason"].lower())
 
     def test_skill_canonicalization_normalizes_aliases(self):
         normalized = canonicalize_skills(["Postgres", "postgresql", "Node", "React.js", "JS"])
@@ -98,6 +117,10 @@ class MatchingUtilsTests(unittest.TestCase):
     def test_role_inference_uses_resume_text_evidence(self):
         result = infer_role_from_skills(["Python"], "Built REST APIs with Docker, PostgreSQL, caching, and authentication.")
         self.assertEqual(result["title"], "Backend Engineer")
+
+    def test_role_inference_does_not_match_keywords_inside_other_words(self):
+        result = infer_role_from_skills([], "Improved capital allocation for a small business.")
+        self.assertEqual(result["field"], "General")
 
     def test_role_catalog_expansion_supports_devops_signals(self):
         result = infer_role_from_skills(
@@ -131,6 +154,10 @@ class MatchingUtilsTests(unittest.TestCase):
         self.assertGreater(len(results["role_matches"]), 0)
         self.assertIn("FastAPI", results["priority_keywords"] + [item["skill"] for item in results["jd_skill_matches"]])
         self.assertIn("SQL", [item["skill"] for item in results["resume_skill_evidence"]])
+        self.assertEqual(results["matching_method"], "lexical_fallback")
+        self.assertEqual(results["similarity_label"], "keyword coverage")
+        self.assertTrue(results["matching_warning"])
+        self.assertNotIn("embedding unavailable", results["matching_warning"])
 
     def test_semantic_matching_uses_available_vector_index(self):
         class FakeModel:
@@ -139,8 +166,8 @@ class MatchingUtilsTests(unittest.TestCase):
 
         fake_indexes = {
             "model": FakeModel(),
-            "role_vectors": [[1.0, 0.0]] * 20,
-            "skill_vectors": [[1.0, 0.0]] * 100,
+            "role_vectors": [[1.0, 0.0]] * len(ROLE_CATALOG),
+            "skill_vectors": [[1.0, 0.0]] * len(SKILL_ONTOLOGY),
         }
         with patch("backend.app.core.matching.build_vector_indexes", return_value=fake_indexes):
             results = compute_semantic_matches(
@@ -150,6 +177,61 @@ class MatchingUtilsTests(unittest.TestCase):
             )
         self.assertGreater(results["resume_job_similarity"], 0)
         self.assertGreater(len(results["role_matches"]), 0)
+        self.assertEqual(results["matching_method"], "semantic_embedding")
+        self.assertEqual(results["similarity_label"], "semantic similarity")
+        self.assertIsNone(results["matching_warning"])
+        self.assertEqual([item["skill"] for item in results["jd_skill_matches"]], ["Python"])
+
+    def test_vector_indexes_are_built_once_per_process(self):
+        class FakeModel:
+            def encode(self, texts, convert_to_numpy=True):
+                return [[1.0, 0.0] for _ in texts]
+
+        reset_vector_indexes_cache()
+        self.addCleanup(reset_vector_indexes_cache)
+        with patch("backend.app.core.matching.load_embedding_model", return_value=FakeModel()) as load_model:
+            first = build_vector_indexes()
+            second = build_vector_indexes()
+
+        self.assertIs(first, second)
+        load_model.assert_called_once_with()
+
+    def test_vector_index_initialization_is_single_flight_under_concurrency(self):
+        barrier = Barrier(4)
+        encode_calls = 0
+        encode_lock = Lock()
+
+        class FakeModel:
+            def encode(self, texts, convert_to_numpy=True):
+                nonlocal encode_calls
+                with encode_lock:
+                    encode_calls += 1
+                return [[1.0, 0.0] for _ in texts]
+
+        reset_vector_indexes_cache()
+        self.addCleanup(reset_vector_indexes_cache)
+
+        def build_after_barrier():
+            barrier.wait()
+            return build_vector_indexes()
+
+        with patch("backend.app.core.matching.load_embedding_model", return_value=FakeModel()) as load_model:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                results = list(executor.map(lambda _: build_after_barrier(), range(4)))
+
+        self.assertTrue(all(result is results[0] for result in results))
+        load_model.assert_called_once_with()
+        self.assertEqual(encode_calls, 2)
+
+    def test_vector_index_initialization_failure_is_cached(self):
+        reset_vector_indexes_cache()
+        self.addCleanup(reset_vector_indexes_cache)
+        with patch("backend.app.core.matching.load_embedding_model", side_effect=OSError("private path")) as load_model:
+            for _ in range(2):
+                with self.assertRaisesRegex(RuntimeError, "Semantic index initialization is unavailable"):
+                    build_vector_indexes()
+
+        load_model.assert_called_once_with()
 
     def test_cosine_similarity_handles_zero_and_aligned_vectors(self):
         self.assertEqual(cosine_similarity([0, 0], [1, 0]), 0.0)

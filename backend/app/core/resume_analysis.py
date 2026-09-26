@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..services.openrouter_analysis import analyze_with_openrouter
 from .matching import (
     build_resume_highlights,
     canonicalize_skills,
@@ -74,6 +75,13 @@ SKILL_HINTS = {
 
 ACTIONABLE_METRIC_HINT = "Add a metric, outcome, or scale detail so the bullet proves impact."
 TOKEN_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9+#./-]*")
+BULLET_MARKER_PATTERN = re.compile(r"^\s*(?:[\-\*\u2022\u25cf]|\d{1,2}[.)])\s+")
+IMPACT_PATTERN = re.compile(
+    r"(?:\b\d+(?:\.\d+)?%|\$\s?\d[\d,]*(?:\.\d+)?|\b\d+(?:\.\d+)?x\b|"
+    r"\b\d+\+|\b\d[\d,]*\s+(?:users?|customers?|clients?|requests?|transactions?|"
+    r"hours?|days?|weeks?|months?|seconds?|milliseconds?|ms|projects?|teams?|regions?)\b)",
+    re.IGNORECASE,
+)
 PDF_FONT_NAME = "BBHBartle"
 PDF_FONT_PATH = Path(__file__).resolve().parents[1] / "assets" / "fonts" / "BBHBartle-Regular.ttf"
 
@@ -93,7 +101,7 @@ def build_section_category_scores(score_checks: list[dict[str, Any]]) -> list[di
             }
         grouped[category]["max_score"] += check["weight"]
         if check["matched"]:
-            grouped[category]["score"] += check["weight"]
+            grouped[category]["score"] += check.get("score", check["weight"])
         grouped[category]["checks"].append(
             {
                 "label": check["label"],
@@ -125,8 +133,8 @@ def _extract_bullets(resume_text: str) -> list[str]:
         line = normalize_text(raw_line)
         if len(line) < 18:
             continue
-        if re.match(r"^\s*[\-\*\u2022\u25cf]", raw_line):
-            bullets.append(re.sub(r"^\s*[\-\*\u2022\u25cf]\s*", "", raw_line).strip())
+        if BULLET_MARKER_PATTERN.match(raw_line):
+            bullets.append(BULLET_MARKER_PATTERN.sub("", raw_line).strip())
             continue
         if re.match(r"^(worked on|responsible for|helped with|involved in|participated in|assisted with)\b", line.lower()):
             bullets.append(line)
@@ -141,8 +149,8 @@ def _rewrite_bullet(bullet: str) -> str:
             remainder = bullet[len(weak_phrase):].strip(" :,-")
             suggestion = f"{replacement} {remainder}".strip()
             break
-    if not re.search(r"\b\d+%|\b\d+\+|\b\d+\b", suggestion):
-        suggestion = f"{suggestion.rstrip('.')} by using specific tools and measurable outcomes."
+    if not IMPACT_PATTERN.search(suggestion):
+        suggestion = f"{suggestion.rstrip('.')} [add a verified metric, outcome, or scale detail]."
     return suggestion
 
 
@@ -156,7 +164,7 @@ def analyze_bullet_quality(resume_text: str) -> dict[str, Any]:
             if weak_phrase in lowered:
                 issues.append(f"Weak opener: '{weak_phrase}'")
                 break
-        if not re.search(r"\b\d+%|\b\d+\+|\b\d+\b", bullet):
+        if not IMPACT_PATTERN.search(bullet):
             issues.append("Missing measurable result")
         if len(TOKEN_PATTERN.findall(bullet)) < 8:
             issues.append("Too short to show context and impact")
@@ -173,6 +181,7 @@ def analyze_bullet_quality(resume_text: str) -> dict[str, Any]:
     return {
         "total_bullets": len(bullets),
         "flagged_bullets": findings,
+        "analysis_method": "deterministic",
         "summary": (
             f"Flagged {len(findings)} of {len(bullets)} bullets."
             if bullets
@@ -182,9 +191,10 @@ def analyze_bullet_quality(resume_text: str) -> dict[str, Any]:
 
 
 def _keyword_in_resume(keyword: str, resume_text: str, resume_skills: list[str]) -> bool:
-    lowered_resume = (resume_text or "").lower()
-    lowered_skills = {skill.lower() for skill in (resume_skills or [])}
-    return keyword.lower() in lowered_resume or keyword.lower() in lowered_skills
+    normalized_keyword = normalize_text(keyword).lower()
+    lowered_skills = {normalize_text(skill).lower() for skill in (resume_skills or [])}
+    pattern = rf"(?<![a-z0-9]){re.escape(normalized_keyword)}(?![a-z0-9])"
+    return normalized_keyword in lowered_skills or re.search(pattern, normalize_text(resume_text).lower()) is not None
 
 
 def categorize_gap_keywords(job_description: str, resume_text: str, resume_skills: list[str]) -> dict[str, list[str]]:
@@ -257,7 +267,8 @@ def build_requirement_evidence_matrix(
             continue
         seen.add(key)
 
-        evidence = next((line for line in resume_lines if key in line.lower()), "")
+        evidence_pattern = re.compile(rf"(?<![a-z0-9]){re.escape(key)}(?![a-z0-9])")
+        evidence = next((line for line in resume_lines if evidence_pattern.search(line.lower())), "")
         listed_skill = key in normalized_skills
         matched = bool(evidence or listed_skill)
         if not evidence and listed_skill:
@@ -315,11 +326,31 @@ def _safe_semantic_matches(job_description: str, resume_text: str, resume_skills
         return None, None
     try:
         return compute_semantic_matches(job_description, resume_text, resume_skills), None
-    except Exception as exc:
-        return None, str(exc)
+    except Exception:
+        return None, "semantic_unavailable"
 
 
-def build_full_analysis(resume_data: dict[str, Any], resume_text: str, job_description: str) -> dict[str, Any]:
+def _requirement_evidence_from_ai(ai_result: dict[str, Any]) -> dict[str, Any]:
+    requirements = ai_result.get("requirements", [])
+    matched_count = sum(item.get("status") == "Matched" for item in requirements)
+    total_count = len(requirements)
+    coverage_percent = round((matched_count / total_count) * 100, 1) if total_count else 0.0
+    return {
+        "requirements": requirements,
+        "matched_count": matched_count,
+        "total_count": total_count,
+        "coverage_percent": coverage_percent,
+        "analysis_method": "openrouter_llm",
+        "summary": ai_result["summary"],
+    }
+
+
+def build_full_analysis(
+    resume_data: dict[str, Any],
+    resume_text: str,
+    job_description: str,
+    use_ai_analysis: bool = False,
+) -> dict[str, Any]:
     parsed_resume_skills = resume_data.get("skills") or []
     role_summary = infer_role_from_skills(parsed_resume_skills, resume_text)
     candidate_level = infer_candidate_level(resume_data.get("no_of_pages", 0), resume_text)
@@ -341,6 +372,42 @@ def build_full_analysis(resume_data: dict[str, Any], resume_text: str, job_descr
         resume_skills,
         semantic_results,
     )
+    ai_analysis = {
+        "status": "not_requested",
+        "provider": "openrouter",
+        "model": None,
+        "similarity_label": None,
+        "warning": None,
+    }
+    ai_match_score = None
+    if use_ai_analysis:
+        try:
+            ai_result = analyze_with_openrouter(resume_text, job_description, _extract_bullets(resume_text))
+        except Exception:
+            ai_analysis.update(
+                {
+                    "status": "unavailable",
+                    "warning": "Enhanced AI analysis is unavailable; deterministic checks are shown instead.",
+                }
+            )
+        else:
+            ai_analysis.update(
+                {
+                    "status": "completed",
+                    "model": ai_result["model"],
+                    "similarity_label": "AI evidence alignment",
+                    "usage": ai_result.get("usage", {}),
+                }
+            )
+            ai_match_score = ai_result.get("match_score")
+            bullet_quality = {
+                "total_bullets": len(_extract_bullets(resume_text)),
+                "flagged_bullets": ai_result.get("bullet_findings", []),
+                "analysis_method": "openrouter_llm",
+                "summary": ai_result["summary"],
+            }
+            if normalize_text(job_description):
+                requirement_evidence = _requirement_evidence_from_ai(ai_result)
     interview_prep = generate_interview_prep(job_description, resume_skills, role_summary["title"]) if normalize_text(job_description) else {
         "technical_questions": [],
         "project_questions": [],
@@ -365,7 +432,11 @@ def build_full_analysis(resume_data: dict[str, Any], resume_text: str, job_descr
             "recommended_skills": role_summary["recommended_skills"],
             "courses_key": role_summary["courses_key"],
             "match_reason": role_summary["match_reason"],
-            "semantic_match_score": semantic_results["resume_job_similarity"] if semantic_results else None,
+            "semantic_match_score": (
+                ai_match_score
+                if ai_match_score is not None
+                else semantic_results["resume_job_similarity"] if semantic_results else None
+            ),
         },
         "ats_checks": score_checks,
         "ats_section_scores": section_scores,
@@ -374,6 +445,7 @@ def build_full_analysis(resume_data: dict[str, Any], resume_text: str, job_descr
         "requirement_evidence": requirement_evidence,
         "semantic_results": semantic_results,
         "semantic_error": semantic_error,
+        "ai_analysis": ai_analysis,
         "interview_prep": interview_prep,
         "job_description": job_description,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -521,6 +593,7 @@ def build_api_payload(
     job_description: str,
     candidate_name: str = "",
     page_count: int | None = None,
+    use_ai_analysis: bool = False,
 ) -> dict[str, Any]:
     parser_data = {
         "skills": resume_skills,
@@ -529,7 +602,7 @@ def build_api_payload(
     if candidate_name.strip():
         parser_data["name"] = candidate_name.strip()
     resume_data = merge_resume_data(resume_text, parser_data)
-    return build_full_analysis(resume_data, resume_text, job_description)
+    return build_full_analysis(resume_data, resume_text, job_description, use_ai_analysis=use_ai_analysis)
 
 
 def as_json(data: dict[str, Any]) -> bytes:

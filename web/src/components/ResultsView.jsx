@@ -98,7 +98,7 @@ function SuggestionsPanel({ analysis, onPreview, drafts, setDrafts }) {
         <p className="field-help" role="status">{copyStatus || (skipped.includes(selected) ? 'Skipped for this review. You can restore it.' : '')}</p>
       </section>
   return <div className="detail-panel">
-    <header className="panel-heading"><h2>Improve bullet wording</h2><p>Keep only wording you can support.</p></header>
+    <header className="panel-heading"><h2>Improve bullet wording</h2><p>{analysis.bullet_quality?.analysis_method === 'openrouter_llm' ? 'Reviewed with GLM. Keep only wording you can support.' : 'Rule-based review. Keep only wording you can support.'}</p></header>
     <div className="edit-workspace">
       <div className="edit-list" role="group" aria-label="Choose feedback">{findings.map((item, index) =>
         <button type="button" className={selected === index ? 'edit-choice is-selected' : 'edit-choice'} aria-pressed={selected === index} key={index} onClick={() => { setSelected(index); setCopyStatus(''); if (mobile) setEditorOpen(true) }}>
@@ -159,6 +159,9 @@ export default function ResultsView({
   const priority = finding?.issues?.[0] || missing[0]?.label || 'Compare with a target role'
   const nextTab = finding ? 'suggestions' : missing.length ? 'ats' : 'keywords'
   const roleProvided = Boolean(analysis.job_description?.trim())
+  const aiCompleted = analysis.ai_analysis?.status === 'completed'
+  const matchLabel = (aiCompleted ? analysis.ai_analysis?.similarity_label : analysis.semantic_results?.similarity_label) || 'role similarity'
+  const matchWarning = analysis.ai_analysis?.status === 'unavailable' ? analysis.ai_analysis.warning : (!aiCompleted ? analysis.semantic_results?.matching_warning : null)
   function selectTab(id, focus = false) {
     onTabChange(id)
     if (focus) tabRefs.current[sections.findIndex(section => section.id === id)]?.focus()
@@ -192,7 +195,7 @@ export default function ResultsView({
       </div>
       <aside className="context-panel" aria-label="Resume context">
         <section className="document-tool"><Icon name="file" size={26} /><h2>Your original resume</h2><p>Check each finding against the document you uploaded.</p><button type="button" className="secondary-button" onClick={() => setPreviewOpen(true)}>View resume <Icon name="external" size={16} /></button></section>
-        <section className="role-tool"><h2>Job match</h2>{roleProvided ? <><p className="role-score">{scoreValue(analysis.summary.semantic_match_score) ?? '—'}<small>{analysis.summary.semantic_match_score == null ? ' Not available' : '% role similarity'}</small></p><p className="role-excerpt">{analysis.job_description}</p><button type="button" className="text-button" onClick={() => selectTab('keywords',true)}>View match <Icon name="arrow" size={16} /></button><button type="button" className="text-button" onClick={onEdit}>Edit job description</button></> : <><p>Compare your resume with a job description.</p><button type="button" className="secondary-button" onClick={onEdit}>Add job description</button></>}</section>
+        <section className="role-tool"><h2>Job match</h2>{roleProvided ? <><p className="role-score">{scoreValue(analysis.summary.semantic_match_score) ?? '—'}<small>{analysis.summary.semantic_match_score == null ? ' Not available' : `% ${matchLabel}`}</small></p>{matchWarning ? <p className="panel-description">{matchWarning}</p> : null}<p className="role-excerpt">{analysis.job_description}</p><button type="button" className="text-button" onClick={() => selectTab('keywords',true)}>View match <Icon name="arrow" size={16} /></button><button type="button" className="text-button" onClick={onEdit}>Edit job description</button></> : <><p>Compare your resume with a job description.</p><button type="button" className="secondary-button" onClick={onEdit}>Add job description</button></>}</section>
       </aside>
     </div>
     <dialog className="preview-dialog" ref={dialogRef} aria-labelledby="preview-title" onClose={() => setPreviewOpen(false)} onClick={event => { if (event.target === event.currentTarget) dialogRef.current?.close() }}>

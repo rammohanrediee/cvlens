@@ -1,6 +1,7 @@
 """FastAPI application and bounded, privacy-safe HTTP boundary."""
 
 import json
+import ipaddress
 import logging
 import os
 import secrets
@@ -27,6 +28,34 @@ def error_response(status, code, message, details=None, headers=None):
         {"error": {"code": code, "message": message, "details": details or []}},
         status_code=status,
         headers=headers,
+    )
+
+
+def _is_loopback_host(host: str) -> bool:
+    normalized_host = host.strip().lower().strip("[]")
+    if normalized_host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized_host).is_loopback
+    except ValueError:
+        return False
+
+
+def validate_deployment_security(host: str | None = None) -> None:
+    if os.getenv("RESUME_API_KEY", ""):
+        return
+    anonymous_opt_in = os.getenv("ALLOW_UNAUTHENTICATED_POSTS", "").strip().lower()
+    if anonymous_opt_in in {"1", "true", "yes", "on"}:
+        return
+    if host is None:
+        raise RuntimeError(
+            "Application factories require an explicit bind host, RESUME_API_KEY, "
+            "or ALLOW_UNAUTHENTICATED_POSTS=true."
+        )
+    if _is_loopback_host(host):
+        return
+    raise RuntimeError(
+        "Public API binding requires RESUME_API_KEY or explicit ALLOW_UNAUTHENTICATED_POSTS=true."
     )
 
 
@@ -176,7 +205,8 @@ class RequestBoundary:
         )(scope, receive, send)
 
 
-def create_app() -> FastAPI:
+def create_app(host: str | None = None) -> FastAPI:
+    validate_deployment_security(host)
     app = FastAPI(title="Resume Analysis API", version="1.0.0")
     app.state.rate_limiter = RequestRateLimiter(
         limit=int(os.getenv("API_RATE_LIMIT_PER_MINUTE", "60")),
@@ -234,11 +264,14 @@ def resolve_server_config() -> tuple[str, int]:
 
 def run(host=None, port=None):
     configured_host, configured_port = resolve_server_config()
+    effective_host = host or configured_host
+    effective_port = port if port is not None else configured_port
+    validate_deployment_security(effective_host)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     uvicorn.run(
-        create_app(),
-        host=host or configured_host,
-        port=port if port is not None else configured_port,
+        create_app(host=effective_host),
+        host=effective_host,
+        port=effective_port,
         access_log=False,
         proxy_headers=False,
     )

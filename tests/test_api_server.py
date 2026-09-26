@@ -5,7 +5,8 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from reportlab.pdfgen import canvas
 
-from backend.app.api.server import MAX_REQUEST_BYTES, RequestRateLimiter, create_app, resolve_server_config
+from backend.app.api.server import MAX_REQUEST_BYTES, RequestRateLimiter, create_app, resolve_server_config, run
+from backend.app.schemas.analysis import MAX_JOB_DESCRIPTION_CHARACTERS, MAX_RESUME_CHARACTERS, MAX_RESUME_SKILLS
 
 
 SAMPLE_RESUME = """
@@ -25,7 +26,7 @@ class ResumeAnalysisAPITestCase(unittest.TestCase):
         self.environment = patch.dict("os.environ", {"RESUME_API_KEY": "", "API_RATE_LIMIT_PER_MINUTE": "60"})
         self.environment.start()
         self.addCleanup(self.environment.stop)
-        self.app = create_app()
+        self.app = create_app(host="127.0.0.1")
         self.client = TestClient(self.app)
         self.addCleanup(self.client.close)
 
@@ -61,12 +62,24 @@ class ResumeAnalysisAPITestCase(unittest.TestCase):
             {"page_count": "2"},
             {"resume_text": {"private": "sensitive-resume"}},
             {"resume_skills": "Python"},
+            {"use_ai_analysis": "true"},
         ):
             with self.subTest(fields=fields):
                 response = self.client.post("/api/v1/analyses", json={"resume_text": SAMPLE_RESUME, **fields})
                 self.assert_error(response, 422, "validation_error")
                 self.assertNotIn("sensitive-resume", response.text)
                 self.assertNotIn(SAMPLE_RESUME, response.text)
+
+    def test_analysis_fields_have_product_specific_limits(self):
+        invalid_payloads = (
+            {"resume_text": "x" * (MAX_RESUME_CHARACTERS + 1)},
+            {"resume_text": SAMPLE_RESUME, "job_description": "x" * (MAX_JOB_DESCRIPTION_CHARACTERS + 1)},
+            {"resume_text": SAMPLE_RESUME, "resume_skills": ["Python"] * (MAX_RESUME_SKILLS + 1)},
+            {"resume_text": SAMPLE_RESUME, "page_count": 21},
+        )
+        for payload in invalid_payloads:
+            with self.subTest(fields=payload.keys()):
+                self.assert_error(self.client.post("/api/v1/analyses", json=payload), 422, "validation_error")
 
     def test_analysis_endpoint(self):
         response = self.client.post(
@@ -84,6 +97,38 @@ class ResumeAnalysisAPITestCase(unittest.TestCase):
         self.assertIn("ats_section_scores", data)
         self.assertIn("bullet_quality", data)
         self.assertGreater(data["requirement_evidence"]["total_count"], 0)
+
+    def test_analysis_endpoint_uses_openrouter_only_when_explicitly_requested(self):
+        ai_result = {
+            "model": "z-ai/glm-5.3-flash",
+            "match_score": 88,
+            "summary": "The resume directly supports the API requirement.",
+            "bullet_findings": [],
+            "requirements": [
+                {
+                    "requirement": "Python API",
+                    "status": "Matched",
+                    "evidence": "Built a Python API for customer analytics.",
+                    "rationale": "The resume contains direct API delivery evidence.",
+                }
+            ],
+            "usage": {"prompt_tokens": 80, "completion_tokens": 40},
+        }
+        with patch("backend.app.core.resume_analysis.analyze_with_openrouter", return_value=ai_result) as analyze_ai:
+            response = self.client.post(
+                "/api/v1/analyses",
+                json={
+                    "resume_text": "EXPERIENCE\n- Built a Python API for customer analytics.",
+                    "job_description": "Build a Python API for customer analytics products.",
+                    "use_ai_analysis": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()["data"]
+        self.assertEqual(data["ai_analysis"]["status"], "completed")
+        self.assertEqual(data["summary"]["semantic_match_score"], 88)
+        analyze_ai.assert_called_once()
 
     def test_analysis_endpoint_returns_parsed_resume_metadata(self):
         response = self.client.post(
@@ -127,6 +172,46 @@ class ResumeAnalysisAPITestCase(unittest.TestCase):
     @patch.dict("os.environ", {"API_HOST": "0.0.0.0", "PORT": "9123"}, clear=False)
     def test_server_configuration_uses_deployment_environment(self):
         self.assertEqual(resolve_server_config(), ("0.0.0.0", 9123))
+
+    def test_public_binding_requires_authentication_or_explicit_anonymous_opt_in(self):
+        public_environment = {
+            "API_HOST": "0.0.0.0",
+            "RESUME_API_KEY": "",
+            "ALLOW_UNAUTHENTICATED_POSTS": "",
+        }
+        with patch.dict("os.environ", public_environment, clear=False):
+            with self.assertRaisesRegex(RuntimeError, "RESUME_API_KEY"):
+                create_app(host="0.0.0.0")
+
+        public_environment["ALLOW_UNAUTHENTICATED_POSTS"] = "true"
+        with patch.dict("os.environ", public_environment, clear=False):
+            app = create_app(host="0.0.0.0")
+            self.assertIsNotNone(app)
+
+    def test_app_factory_requires_an_explicit_bind_or_deployment_security_mode(self):
+        with patch.dict(
+            "os.environ",
+            {"RESUME_API_KEY": "", "ALLOW_UNAUTHENTICATED_POSTS": ""},
+            clear=False,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "explicit bind host"):
+                create_app()
+            self.assertIsNotNone(create_app(host="127.0.0.2"))
+
+    def test_cli_host_override_cannot_bypass_public_bind_guard(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "API_HOST": "127.0.0.1",
+                "RESUME_API_KEY": "",
+                "ALLOW_UNAUTHENTICATED_POSTS": "",
+            },
+            clear=False,
+        ):
+            with patch("backend.app.api.server.uvicorn.run") as uvicorn_run:
+                with self.assertRaisesRegex(RuntimeError, "RESUME_API_KEY"):
+                    run(host="0.0.0.0")
+        uvicorn_run.assert_not_called()
 
     def test_rate_limiter_rejects_requests_after_the_window_limit(self):
         limiter = RequestRateLimiter(limit=2, window_seconds=60, max_clients=1)

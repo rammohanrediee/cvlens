@@ -21,6 +21,7 @@ function App() {
   const [file, setFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [jobDescription, setJobDescription] = useState('')
+  const [useAiAnalysis, setUseAiAnalysis] = useState(false)
   const [analysis, setAnalysis] = useState(null)
   const [analysisPayload, setAnalysisPayload] = useState(null)
   const [error, setError] = useState('')
@@ -143,6 +144,7 @@ function App() {
         resume_skills: [],
         job_description: trimmedJobDescription,
         page_count: extraction.page_count,
+        use_ai_analysis: useAiAnalysis,
       }
       const result = await analyzeResume(payload, { signal: controller.signal })
       if (activeRequest.current !== requestId) return
@@ -193,6 +195,7 @@ function App() {
     setDocumentPreview(null)
     setFile(null)
     setJobDescription('')
+    setUseAiAnalysis(false)
     setAnalysis(null)
     setAnalysisPayload(null)
     setError('')
@@ -233,8 +236,10 @@ function App() {
             file={file}
             inputRef={fileInput}
             jobDescription={jobDescription}
+            useAiAnalysis={useAiAnalysis}
             onFileSelect={selectFile}
             onJobChange={setJobDescription}
+            onUseAiAnalysisChange={setUseAiAnalysis}
             onReset={resetSession}
             onSubmit={handleSubmit}
             onViewResults={() => navigate('results')}

@@ -70,6 +70,10 @@ textarea { resize: vertical; min-height: 6rem; line-height: 1.65; }
 textarea::placeholder { color: var(--color-muted); opacity: 1; }
 textarea[aria-invalid="true"] { border-color: var(--color-error); }
 .field-help--error { color: var(--color-error); }
+.ai-consent { display: flex; align-items: flex-start; gap: var(--space-sm); margin-block-start: var(--space-md); padding: var(--space-md); border: var(--rule-thin) solid var(--color-rule); border-radius: var(--radius-control); background: var(--color-surface); cursor: pointer; }
+.ai-consent input { inline-size: 1.1rem; block-size: 1.1rem; margin-block-start: 0.15rem; accent-color: var(--color-accent); }
+.ai-consent span { display: grid; gap: var(--space-2xs); }
+.ai-consent small { color: var(--color-muted); line-height: 1.45; }
 summary::-webkit-details-marker { display: none; }
 .submission-status:not(:empty) { margin-block-start: var(--space-sm); }
 .message { display: flex; gap: var(--space-xs); align-items: start; padding: var(--space-sm); background: var(--color-info-surface); color: var(--color-info); margin-block: var(--space-sm); }

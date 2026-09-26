@@ -11,5 +11,6 @@ def analyze_resume(request: AnalysisRequest) -> AnalysisResponse:
             job_description=request.job_description,
             candidate_name=request.candidate_name,
             page_count=request.page_count,
+            use_ai_analysis=request.use_ai_analysis,
         )
     )
