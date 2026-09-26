@@ -37,6 +37,14 @@ class ProjectStructureTests(unittest.TestCase):
         dependency_file = metadata["tool"]["setuptools"]["dynamic"]["dependencies"]["file"]
         self.assertEqual(dependency_file, ["requirements.txt"])
 
+    def test_container_runs_non_root_and_excludes_local_secrets_and_environments(self):
+        dockerfile = (self.PROJECT_ROOT / "Dockerfile").read_text()
+        dockerignore = (self.PROJECT_ROOT / ".dockerignore").read_text()
+
+        self.assertIn("USER cvlens", dockerfile)
+        self.assertIn(".env*", dockerignore)
+        self.assertIn(".venv*/", dockerignore)
+
 
 if __name__ == "__main__":
     unittest.main()

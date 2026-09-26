@@ -13,12 +13,16 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng && \
     rm -rf /var/lib/apt/lists/* && \
     python -m pip install --upgrade pip && \
-    python -m pip install -r /app/requirements.txt
+    python -m pip install -r /app/requirements.txt && \
+    groupadd --system cvlens && \
+    useradd --system --gid cvlens --create-home --home-dir /home/cvlens cvlens
 
-COPY . /app
+COPY --chown=cvlens:cvlens . /app
 
 RUN python -m pip install . && \
     chmod +x /app/start-backend.sh
+
+USER cvlens
 
 EXPOSE 8001
 

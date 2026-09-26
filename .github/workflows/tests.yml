@@ -50,7 +50,7 @@ jobs:
       - name: Build image
         run: docker build -t cvlens-api:test .
       - name: Start backend
-        run: docker run -d --name cvlens-api -e API_HOST=0.0.0.0 -e PORT=8001 -p 8001:8001 cvlens-api:test bash start-backend.sh
+        run: docker run -d --name cvlens-api -e API_HOST=0.0.0.0 -e PORT=8001 -e ALLOW_UNAUTHENTICATED_POSTS=true -p 8001:8001 cvlens-api:test bash start-backend.sh
       - name: Verify health endpoint
         run: |
           for attempt in 1 2 3 4 5; do
